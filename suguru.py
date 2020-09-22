@@ -1,101 +1,184 @@
-import pdfreader
-from pdfreader import PDFDocument, SimplePDFViewer
+from util import CORNER
 
-def PDFparsermed(volume, book):
 
-  NUM_PAGES = 4
-  SIZE = 8
-  CORNERS = (((25, 463), (277, 715)),
-              ((313, 463), (565, 715)),
-              ((25, 130), (277, 382)),
-              ((312, 130), (565, 382)))
-  CELLWIDTH = (CORNERS[0][1][0] - CORNERS[0][0][0]) / SIZE
-  try:
-    fd = open("krazydad/medium/{}/{}.pdf".format(volume, book), "rb")
-  except:
-    return None
-  viewer = SimplePDFViewer(fd)
+class Cell:
 
-  for i in range(1, NUM_PAGES+1):
-    viewer.navigate(i)
-    viewer.render()
-    text = viewer.canvas.text_content
-    #open('{}.txt'.format(book), 'a+').write(text)
-    puzzles = viewer.canvas.text_content.split('Suguru #')[1:]
+  def __init__(self, x, y, v, g, s):
+    self.x = x
+    self.y = y
+    self.value = v
+    self.group = g
+    self.suguru = s
+  
+  # return set of surrounding cells (only some necessary for is_valid)
+  def surrounding(self, some=False):
+    surrounding_deltas = [[1,0],[1,1],[0,1],[-1,1],[-1,0],[-1,-1],[0,-1],[1,-1]]
+    ret = set()
+    for d in surrounding_deltas[:4 if some else None]:
+      sur = self.suguru.get_cell(self.x+d[0], self.y+d[1])
+      if sur: ret.add(sur)
+    return ret
+  
+  def surrounding_values(self):
+    return [c.value for c in self.surrounding() if c.value is not None]
+  
+  # return cell to the right/below (None if border)
+  def right(self):
+    return self.suguru.get_cell(self.x+1,self.y)
+  def below(self):
+    return self.suguru.get_cell(self.x,self.y+1)
 
-    for k in range(len(puzzles)):
-      given = dict()
+  # return whether cell has right/below border
+  def rb(self):
+    return self.right() is None or self.right().group is not self.group
+  def bb(self):
+    return self.below() is None or self.below().group is not self.group
 
-      for x in puzzles[k].split('/Ft1 23 Tf')[1:]:
-        #format of x: '\n223.356 691.375 Td\n(4) Tj\n ET\n BT\n'
-        temp = x.split(' ')
-        given[(int((float(temp[0][1:])-CORNERS[k][0][0]) / CELLWIDTH), 7 - 
-               int((float(temp[1])-CORNERS[k][0][1]) / CELLWIDTH))] = temp[2][-2]
+  def __str__(self):
+    return '({}, {}): {}'.format(self.x, self.y, id(self))
+  def __repr__(self):
+    return self.__str__()
 
-      edges = puzzles[k].split('2.5 w\n1 J\n')[-1].split('{} {} m'.format(CORNERS[k][0][0], CORNERS[k][1][1]))[0]
-      #format of edges: 119.500 715 m
-      #                 119.500 683.500 l
-      #                 88 683.500 m
-      #                 119.500 683.500 l
-      # made by taking string between '2.5 w\n1 J\n' and '\topleft_coord m'
 
-      edges = [[[float(z) for z in y.split()] for y in x.split(' m\n')] for x in edges.split(' l\n')[:-1]]
-      #format of edges: [[[119.5, 715.0], [119.5, 683.5]], ... ]
+class Group:
+  
+  def __init__(self):
+    self.cells = frozenset()
 
-      groups = dict()
-      groupsflat = set()
-      i = 0
-      for y in range(SIZE):
-        for x in range(SIZE):
-          new = set()
-          rightupper = [CORNERS[k][0][0] + (x+1)*CELLWIDTH, CORNERS[k][1][1] - y*CELLWIDTH]
-          leftlower = [CORNERS[k][0][0] + x*CELLWIDTH, CORNERS[k][1][1] - (y+1)*CELLWIDTH]
+  def add_cell(self, cell):
+    self.cells |= frozenset({cell})
 
-          # if next edge is right edge of this coord
-          if i < len(edges) and edges[i][0] == rightupper:
-            i += 1
-          elif (x+1, y) in groups:
-            new = set(groups[(x+1, y)])
-          elif x+1 < SIZE:
-            new.add((x+1, y))
+  def values(self):
+    return {c.value for c in self.cells if c.value is not None}
 
-          # if next edge is lower edge of this coord
-          if i < len(edges) and edges[i][0] == leftlower:
-            i += 1
-          elif (x, y+1) in groups:
-            new.update(groups[(x, y+1)])
-          elif y+1 < SIZE:
-            new.add((x, y+1))
-          
-          if (x, y) in groups:
-            groups[(x, y)] |= frozenset(new)
-            group = groups[(x, y)]
-            for coord in new:
-              groups[coord] = group
-          else:
-            group = frozenset(new) | frozenset([(x, y)])
-            for coord in group:
-              groups[coord] = group
-          
-          newgroup = True
-          for groupflat in groupsflat:
-            if len(groupflat & group) != 0:
-              groupsflat.remove(groupflat)
-              groupsflat.add(group)
-              newgroup = False
-              break
-          if newgroup: groupsflat.add(group)
+  def is_connected(self):
+    
+    def flood_group(bor, rem):
+      if len(bor)==0: return len(rem)==0
+      newbor = set()
+      for c in bor:
+        newbor |= (c.surrounding() & rem)
+      rem -= newbor
+      return flood_group(newbor, rem)
+    
+    copy = set(self.cells.copy())
+    return flood_group({copy.pop()}, copy)
+
+  def __str__(self):
+    return ', '.join([str(c) for c in self.cells])
+  def __repr__(self):
+    return self.__str__()
+
+
+class Suguru:
+  
+  def __init__(self, initstring):
+    try:
+      given, groups = initstring.split('\n')
+      given = eval(given)
+      groups = eval('[' + groups[1:-1] + ']')
       
-      f = open('readable_data/medium/{}-{}.txt'.format(volume, book), 'w')
-      f.write(str(given))
-      f.write('\n')
-      f.write(str(groupsflat).replace('), f', ', f').replace('frozenset(', ''))
-      f.write('\n')
-      f.close()
-      break
+      self.cells = dict()
+      self.groups = frozenset()
+      w = 0
+      h = 0
+      for group in groups:
+        g = Group()
+       
+        for coord in group:
+          w = coord[0] if coord[0] > w else w
+          h = coord[1] if coord[1] > h else h
+          new_cell = Cell(coord[0], coord[1], given.get(coord, None), g, self)
+          self.cells[coord] = new_cell
+          g.add_cell(new_cell)
 
-    fd.close()
-    break
+        self.groups |= frozenset({g})
+
+      self.width = w+1
+      self.height = h+1
+      self.nb_empty = self.width*self.height - len(given)
+
+      self.is_valid()
+    except AssertionError as msg:
+      print('The following suguru is not valid because', msg)
+      print(given)
+      for g in self.groups: print(g)
+    except:
+      raise TypeError
+
+  # returns True if Suguru is in a valid state, otherwise raises AssertionError
+  def is_valid(self):
+    
+    assert self.width*self.height == len(self.cells), 'not all cells are in a group'
+
+    for group in self.groups:
+      values = group.values()
+      assert len(values) == len(set(values)), 'same value is used twice in a group'
+
+    def msg(cell, sur):
+      return '({},{}) is to close to ({},{})'.format(cell.x, cell.y, sur.x, sur.y)
+    
+    for cell in self.cells.values():
+      for sur in cell.surrounding(True):
+        assert cell.value != sur.value or cell.value == None or sur.value == None, msg(cell, sur)
+    
+    for group in self.groups:
+      assert group.is_connected(), 'the following group is not connected: ' + str(group)
+
+    return True
+
+  # makes a move
+  def move(self, coord, value):
+    cell = self.cells[coord]
+    assert cell.value not in cell.group.values()
+    assert cell.value not in cell.surrounding_values()
+    cell.value = value
+    self.nb_empty -= 1
+    if self.nb_empty==0:
+      print('END')
+
+  # return Cell object with given coords
+  def get_cell(self, x, y):
+    if 0 <= x < self.width and 0 <= y < self.height:
+      return self.cells[(x, y)]
+    else:
+      return None
+  
+  def get_row(self, y):
+    if y < self.height:
+      return [self.get_cell(i, y) for i in range(self.width)]
+    else: return None
+
+  def drawrow(self, r):
+    def number(c):
+      return str(c.value) if c.value is not None else ' '
+    def rborder(c):
+      return '┃' if c.rb() else '│'
+    def bborder(c):
+      return ('━━━' if c.bb() else '───') + rbcorner(c)
+    def rbcorner(c):
+      return CORNER(c.right().bb(), c.below().rb(), c.bb(), c.rb())
+
+    ret = '┃ '+' '.join(['{} {}'.format(number(c), rborder(c)) for c in self.get_row(r)])+'\n'
+    if r != (self.height-1):
+      ret += ('┣' if self.get_cell(0,r).bb() else '┠') + ''.join([bborder(c) for c in self.get_row(r)[:-1]]) + \
+    ('━━━┫' if self.get_cell(self.width-1,r).bb() else '───┨') + '\n'
+    return ret
+
+  def draw(self):
+    ret = '┏━━━'+'━━━'.join([('┳' if c.rb() else '┯') for c in self.get_row(0)[:-1]])+'━━━┓\n'
+    for r in range(self.height):
+      ret += self.drawrow(r)
+    ret += '┗━━━'+'━━━'.join([('┻' if c.rb() else '┷') for c in self.get_row(self.height-1)[:-1]])+'━━━┛\n'
+    return ret
+
 
 if __name__ == "__main__":
-  PDFparsermed(1, 1)
+  f = open('readable_data/medium/1-1.txt', 'r')
+  puzzles = f.read().split('\n\n')[:-1]
+  for puz in puzzles[:1]:
+    sug = Suguru(puz)
+    print(sug.draw())
+    sug.move((6, 3), 5)
+    print(sug.draw())
+  f.close()
