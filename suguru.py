@@ -20,7 +20,7 @@ class Cell:
     return ret
   
   def surrounding_values(self):
-    return [c.value for c in self.surrounding() if c.value is not None]
+    return {c.value for c in self.surrounding() if c.value is not None}
   
   # return cell to the right/below (None if border)
   def right(self):
@@ -35,7 +35,7 @@ class Cell:
     return self.below() is None or self.below().group is not self.group
 
   def __str__(self):
-    return '({}, {}): {}'.format(self.x, self.y, id(self))
+    return '({}, {}): {}'.format(self.x, self.y, self.value)
   def __repr__(self):
     return self.__str__()
 
@@ -128,8 +128,8 @@ class Suguru:
     return True
 
   # makes a move
-  def move(self, coord, value):
-    cell = self.cells[coord]
+  def move(self, x, y, value):
+    cell = self.cells[(x, y)]
     assert cell.value not in cell.group.values()
     assert cell.value not in cell.surrounding_values()
     cell.value = value
