@@ -6,7 +6,7 @@ class Cell:
   def __init__(self, x, y, v, g, s):
     self.x = x
     self.y = y
-    self.value = v
+    self.value = int(v) if v is not None else v
     self.group = g
     self.suguru = s
   
@@ -135,7 +135,8 @@ class Suguru:
     cell.value = value
     self.nb_empty -= 1
     if self.nb_empty==0:
-      print('END')
+      return True
+    return False
 
   # return Cell object with given coords
   def get_cell(self, x, y):
@@ -161,15 +162,16 @@ class Suguru:
 
     ret = '┃ '+' '.join(['{} {}'.format(number(c), rborder(c)) for c in self.get_row(r)])+'\n'
     if r != (self.height-1):
-      ret += ('┣' if self.get_cell(0,r).bb() else '┠') + ''.join([bborder(c) for c in self.get_row(r)[:-1]]) + \
+      ret += (' ┣' if self.get_cell(0,r).bb() else ' ┠') + ''.join([bborder(c) for c in self.get_row(r)[:-1]]) + \
     ('━━━┫' if self.get_cell(self.width-1,r).bb() else '───┨') + '\n'
     return ret
 
   def draw(self):
-    ret = '┏━━━'+'━━━'.join([('┳' if c.rb() else '┯') for c in self.get_row(0)[:-1]])+'━━━┓\n'
+    ret = '   ' + '   '.join([str(x) for x in range(self.width)]) + '\n'
+    ret += ' ┏━━━'+'━━━'.join([('┳' if c.rb() else '┯') for c in self.get_row(0)[:-1]])+'━━━┓\n'
     for r in range(self.height):
-      ret += self.drawrow(r)
-    ret += '┗━━━'+'━━━'.join([('┻' if c.rb() else '┷') for c in self.get_row(self.height-1)[:-1]])+'━━━┛\n'
+      ret += str(r) + self.drawrow(r)
+    ret += ' ┗━━━'+'━━━'.join([('┻' if c.rb() else '┷') for c in self.get_row(self.height-1)[:-1]])+'━━━┛'
     return ret
 
 
@@ -179,6 +181,6 @@ if __name__ == "__main__":
   for puz in puzzles[:1]:
     sug = Suguru(puz)
     print(sug.draw())
-    sug.move((6, 3), 5)
+    sug.move(6, 3, 5)
     print(sug.draw())
   f.close()
