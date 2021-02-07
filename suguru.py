@@ -35,7 +35,7 @@ class Cell:
     return self.below() is None or self.below().group is not self.group
 
   def __str__(self):
-    return '({}, {}): {}'.format(self.x, self.y, self.value)
+    return '({}, {}): {}'.format(self.x, self.y, self.value if self.value is not None else '_')
   def __repr__(self):
     return self.__str__()
 
@@ -173,6 +173,22 @@ class Suguru:
       ret += str(r) + self.drawrow(r)
     ret += ' ┗━━━'+'━━━'.join([('┻' if c.rb() else '┷') for c in self.get_row(self.height-1)[:-1]])+'━━━┛'
     return ret
+
+
+class Solver:
+  def __init__(self, sug, tester):
+    self.suguru = sug
+    self.tester = tester
+  
+  def move(self, x, y, val):
+    if self.tester is None:
+      return self.suguru.move(x, y, val)
+    else:
+      return self.tester.move(x, y, val)
+  
+  # methods to be overwritten
+  def run(self):
+    pass
 
 
 if __name__ == "__main__":
