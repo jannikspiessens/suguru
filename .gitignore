@@ -1,3 +1,6 @@
-readable_data/
-krazydad/
 __pycache__/
+data/
+output/
+.venv/
+test.py
+scripts/vpn
